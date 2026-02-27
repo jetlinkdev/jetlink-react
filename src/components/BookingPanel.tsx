@@ -34,7 +34,6 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
     setPickupTime,
     setNotes,
     setPaymentMethod,
-    getMinPickupTime,
     getPickupTimeLabel,
   } = useOrder();
 
@@ -151,37 +150,6 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
     const now = new Date();
     now.setMinutes(now.getMinutes() + 10);
     return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-  };
-
-  // Get minimum datetime string for datetime-local input
-  const getMinDateTimeLocal = (): string => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 10);
-    const year = now.getFullYear();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const day = now.getDate().toString().padStart(2, '0');
-    const hours = now.getHours().toString().padStart(2, '0');
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-
-  // Get today's date in YYYY-MM-DD format
-  const getTodayDate = (): string => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = (today.getMonth() + 1).toString().padStart(2, '0');
-    const day = today.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Get tomorrow's date in YYYY-MM-DD format
-  const getTomorrowDate = (): string => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const year = tomorrow.getFullYear();
-    const month = (tomorrow.getMonth() + 1).toString().padStart(2, '0');
-    const day = tomorrow.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
   };
 
   // Handle time change with validation
