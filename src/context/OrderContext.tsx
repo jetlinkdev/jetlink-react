@@ -31,6 +31,7 @@ interface OrderContextType {
   bids: Bid[];
   assignedDriver: DriverInfo | null;
   user: AuthUser | null;
+  editingLocation: 'pickup' | 'destination' | null;
   setPickupLocation: (location: Location, address: string) => void;
   setDestinationLocation: (location: Location, address: string) => void;
   resetLocations: () => void;
@@ -43,6 +44,7 @@ interface OrderContextType {
   addBid: (bid: Bid) => void;
   setAssignedDriver: (driver: DriverInfo | null) => void;
   setUser: (user: AuthUser | null) => void;
+  setEditingLocation: (location: 'pickup' | 'destination' | null) => void;
   createOrderMessage: () => WebSocketMessage | null;
   cancelOrderMessage: () => WebSocketMessage | null;
   acceptBidMessage: (bid: Bid) => WebSocketMessage | null;
@@ -68,6 +70,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [bids, setBids] = useState<Bid[]>([]);
   const [assignedDriver, setAssignedDriver] = useState<DriverInfo | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [editingLocation, setEditingLocation] = useState<'pickup' | 'destination' | null>(null);
 
   const setPickupLocation = useCallback((location: Location, address: string) => {
     setPickupLocationState(location);
@@ -225,6 +228,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         addBid,
         setAssignedDriver,
         setUser,
+        setEditingLocation,
         createOrderMessage,
         cancelOrderMessage,
         acceptBidMessage,

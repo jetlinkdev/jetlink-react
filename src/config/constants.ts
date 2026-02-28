@@ -1,4 +1,4 @@
-export const WS_URL = 'wss://api.jetlink.my.id/ws';
+export const WS_URL = 'ws://localhost:8080/ws';
 
 export const DEFAULT_LOCATION = {
   lat: -8.1716,

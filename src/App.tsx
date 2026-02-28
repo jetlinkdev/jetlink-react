@@ -7,8 +7,6 @@ import { Map } from './components/Map';
 import { BookingPanel } from './components/BookingPanel';
 import { WaitingBidsPanel } from './components/WaitingBidsPanel';
 import { DriverAssignedPanel } from './components/DriverAssignedPanel';
-import { ConnectionStatus as ConnectionStatusComponent } from './components/ConnectionStatus';
-import { MapLegend } from './components/MapLegend';
 import { LoginDialog } from './components/LoginDialog';
 import { ProfileCompletionDialog } from './components/ProfileCompletionDialog';
 import { RatingDialog } from './components/RatingDialog';
@@ -57,6 +55,8 @@ function AppContent() {
     destinationLocation,
     user,
     setUser,
+    editingLocation,
+    setEditingLocation,
   } = useOrder();
 
   const [mapCenter, setMapCenter] = useState<[number, number]>(
@@ -319,25 +319,56 @@ function AppContent() {
   const handleMapClick = useCallback(async (lat: number, lng: number) => {
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+        `/api/nominatim/reverse?format=json&lat=${lat}&lon=${lng}`,
+        {
+          headers: {
+            'Accept': 'application/json',
+          },
+        }
       );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Response is not JSON');
+      }
+      
       const data = await response.json();
       const address = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-      if (!pickupLocation) {
-        // Set pickup location
+      // Handle location selection based on editing mode
+      if (editingLocation === 'pickup') {
+        // User is editing pickup location
+        setPickupLocation({ lat, lon: lng }, address);
+        setEditingLocation(null); // Exit edit mode
+      } else if (editingLocation === 'destination') {
+        // User is editing destination location
+        setDestinationLocation({ lat, lon: lng }, address);
+        setEditingLocation(null); // Exit edit mode
+      } else if (!pickupLocation) {
+        // No pickup yet - set pickup
         setPickupLocation({ lat, lon: lng }, address);
       } else if (!destinationLocation) {
-        // Set destination location
+        // Has pickup, no destination - set destination
         setDestinationLocation({ lat, lon: lng }, address);
       } else {
-        // Both set - reset to new pickup
-        setPickupLocation({ lat, lon: lng }, address);
+        // Both set, no edit mode - do nothing (user should use edit buttons)
+        console.log('Both locations set. Use edit buttons to change locations.');
       }
     } catch (error) {
-      console.error('Reverse geocoding error:', error);
+      console.warn('Reverse geocoding failed, using coordinates:', error);
       const coords = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      if (!pickupLocation) {
+      
+      if (editingLocation === 'pickup') {
+        setPickupLocation({ lat, lon: lng }, coords);
+        setEditingLocation(null);
+      } else if (editingLocation === 'destination') {
+        setDestinationLocation({ lat, lon: lng }, coords);
+        setEditingLocation(null);
+      } else if (!pickupLocation) {
         setPickupLocation({ lat, lon: lng }, coords);
       } else if (!destinationLocation) {
         setDestinationLocation({ lat, lon: lng }, coords);
@@ -345,7 +376,7 @@ function AppContent() {
         setPickupLocation({ lat, lon: lng }, coords);
       }
     }
-  }, [pickupLocation, destinationLocation, setPickupLocation, setDestinationLocation]);
+  }, [pickupLocation, destinationLocation, editingLocation, setEditingLocation, setPickupLocation, setDestinationLocation]);
 
   const handleRouteDrawn = useCallback((distance: number) => {
     calculatePrice(distance);
@@ -511,7 +542,13 @@ function AppContent() {
                 {user && (
                   <button
                     onClick={() => setShowUserProfileDialog(true)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors ${
+                      status === 'connecting' || status === 'reconnecting'
+                        ? 'animate-pulse ring-2 ring-yellow-500'
+                        : status === 'connected'
+                        ? 'ring-2 ring-green-500'
+                        : 'ring-2 ring-red-500'
+                    }`}
                     title={t('settings.profile')}
                   >
                     {user.photoURL ? (
@@ -521,7 +558,13 @@ function AppContent() {
                         className="w-8 h-8 rounded-full"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                        status === 'connecting' || status === 'reconnecting'
+                          ? 'bg-yellow-500'
+                          : status === 'connected'
+                          ? 'bg-green-500'
+                          : 'bg-red-500'
+                      }`}>
                         {(user.displayName || user.email || 'U').charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -535,6 +578,8 @@ function AppContent() {
               isSubmitting={isSubmitting}
               getCurrentLocation={handleGetCurrentLocation}
               isGettingLocation={isGettingLocation}
+              onEditPickup={() => setEditingLocation('pickup')}
+              onEditDestination={() => setEditingLocation('destination')}
             />
           </>
         )}
@@ -558,9 +603,6 @@ function AppContent() {
           <DriverAssignedPanel onBackToHome={handleBackToHome} />
         )}
       </div>
-
-      <MapLegend />
-      <ConnectionStatusComponent status={status} />
 
       {toast && (
         <Toast

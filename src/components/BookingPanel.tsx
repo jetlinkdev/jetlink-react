@@ -10,6 +10,8 @@ interface BookingPanelProps {
   isSubmitting: boolean;
   getCurrentLocation: () => void;
   isGettingLocation: boolean;
+  onEditPickup: () => void;
+  onEditDestination: () => void;
 }
 
 function debounce<T extends (...args: string[]) => Promise<void>>(func: T, wait: number): T {
@@ -20,7 +22,7 @@ function debounce<T extends (...args: string[]) => Promise<void>>(func: T, wait:
   }) as T;
 }
 
-export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGettingLocation }: BookingPanelProps) {
+export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGettingLocation, onEditPickup, onEditDestination }: BookingPanelProps) {
   const { t } = useTranslation();
   const {
     pickupAddress,
@@ -35,6 +37,7 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
     setNotes,
     setPaymentMethod,
     getPickupTimeLabel,
+    editingLocation,
   } = useOrder();
 
   const [pickupSuggestions, setPickupSuggestions] = useState<Suggestion[]>([]);
@@ -276,6 +279,30 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
                 />
               </svg>
             </button>
+            {/* Edit button - only show when both locations are set */}
+            {pickupLocation && destinationLocation && (
+              <button
+                type="button"
+                onClick={onEditPickup}
+                className="absolute right-12 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-primary transition-colors md:hidden"
+                title="Edit pickup location"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            )}
             {showPickupSuggestions && (
               <div
                 ref={pickupSuggestionsRef}
@@ -326,6 +353,30 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
               autoComplete="off"
               className={`w-full pl-11 pr-4 py-3 text-sm border-2 ${getDestinationBorderClass()} rounded-xl focus:outline-none transition-all destination-input text-gray-900 dark:text-white bg-white dark:bg-gray-800`}
             />
+            {/* Edit button - only show when both locations are set */}
+            {pickupLocation && destinationLocation && (
+              <button
+                type="button"
+                onClick={onEditDestination}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-primary transition-colors md:hidden"
+                title="Edit destination location"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            )}
             {showDestinationSuggestions && (
               <div
                 ref={destinationSuggestionsRef}
