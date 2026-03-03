@@ -51,8 +51,6 @@ function AppContent() {
     cancelOrderMessage,
     acceptBidMessage,
     removeBid,
-    pickupLocation,
-    destinationLocation,
     user,
     setUser,
     editingLocation,
@@ -120,23 +118,6 @@ function AppContent() {
     setCurrentOrderId(null);
     setAssignedDriver(null);
   }, [setUser, setOrderState, resetLocations, setCurrentOrderId]);
-
-  // Send auth message to backend when user logs in
-  useEffect(() => {
-    if (user && isLoggedIn && !needsProfile) {
-      const authMessage: WebSocketMessage = {
-        intent: 'auth',
-        data: {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-        },
-        timestamp: Math.floor(Date.now() / 1000),
-      };
-      sendMessage(authMessage);
-    }
-  }, [user, isLoggedIn, needsProfile]);
 
   const handleWebSocketMessage = useCallback((data: WebSocketMessage) => {
     console.log('Received message:', data);
@@ -215,6 +196,11 @@ function AppContent() {
         const orderId = data.data as number;
         setCurrentOrderId(orderId.toString());
         setOrderState('waiting_bids');
+        setIsSubmitting(false); // Reset submitting state - order successfully created
+        setToast({
+          message: 'Order created! Waiting for drivers...',
+          type: 'success',
+        });
         break;
 
       case 'new_bid_received':
@@ -271,9 +257,10 @@ function AppContent() {
 
       case 'error':
         console.error('Error from server:', data.data);
+        setIsSubmitting(false); // Reset submitting state on error
         setToast({
           message: `Error: ${(data.data as { message?: string })?.message || 'Unknown error'}`,
-          type: 'info',
+          type: 'error',
         });
         break;
 
@@ -283,6 +270,24 @@ function AppContent() {
   }, [setCurrentOrderId, setOrderState, addBid, resetLocations]);
 
   const { status, sendMessage } = useWebSocket(handleWebSocketMessage);
+
+  // Send auth message to backend when user logs in AND WebSocket is connected
+  useEffect(() => {
+    if (user && isLoggedIn && !needsProfile && status === 'connected') {
+      const authMessage: WebSocketMessage = {
+        intent: 'auth',
+        data: {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        },
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      sendMessage(authMessage);
+      console.log('Auth message sent:', authMessage);
+    }
+  }, [user, isLoggedIn, needsProfile, status, sendMessage]);
 
   // Send complete profile message to backend
   const handleCompleteProfile = useCallback((profileData: { email: string; displayName: string; phoneNumber: string }) => {
@@ -323,63 +328,53 @@ function AppContent() {
         {
           headers: {
             'Accept': 'application/json',
+            'User-Agent': 'Jetlink Ride-Hailing App v1.0.0 (https://jetlink.com)',
           },
         }
       );
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Response is not JSON');
       }
-      
+
       const data = await response.json();
       const address = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-      // Handle location selection based on editing mode
+      // Only set location if user is in selection mode (clicked input first)
       if (editingLocation === 'pickup') {
         // User is editing pickup location
         setPickupLocation({ lat, lon: lng }, address);
-        setEditingLocation(null); // Exit edit mode
+        setEditingLocation(null); // Exit edit mode, return to free map click
       } else if (editingLocation === 'destination') {
         // User is editing destination location
         setDestinationLocation({ lat, lon: lng }, address);
-        setEditingLocation(null); // Exit edit mode
-      } else if (!pickupLocation) {
-        // No pickup yet - set pickup
-        setPickupLocation({ lat, lon: lng }, address);
-      } else if (!destinationLocation) {
-        // Has pickup, no destination - set destination
-        setDestinationLocation({ lat, lon: lng }, address);
-      } else {
-        // Both set, no edit mode - do nothing (user should use edit buttons)
-        console.log('Both locations set. Use edit buttons to change locations.');
+        setEditingLocation(null); // Exit edit mode, return to free map click
       }
+      // If editingLocation is null, do nothing - user is freely exploring the map
     } catch (error) {
       console.warn('Reverse geocoding failed, using coordinates:', error);
       const coords = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-      
+
       if (editingLocation === 'pickup') {
         setPickupLocation({ lat, lon: lng }, coords);
         setEditingLocation(null);
       } else if (editingLocation === 'destination') {
         setDestinationLocation({ lat, lon: lng }, coords);
         setEditingLocation(null);
-      } else if (!pickupLocation) {
-        setPickupLocation({ lat, lon: lng }, coords);
-      } else if (!destinationLocation) {
-        setDestinationLocation({ lat, lon: lng }, coords);
-      } else {
-        setPickupLocation({ lat, lon: lng }, coords);
       }
+      // If editingLocation is null, do nothing - user is freely exploring the map
     }
-  }, [pickupLocation, destinationLocation, editingLocation, setEditingLocation, setPickupLocation, setDestinationLocation]);
+  }, [editingLocation, setEditingLocation, setPickupLocation, setDestinationLocation]);
 
-  const handleRouteDrawn = useCallback((distance: number) => {
+  const handleRouteDrawn = useCallback((distance: number, coordinates: [number, number][]) => {
     calculatePrice(distance);
+    // Route coordinates are already set in Map.tsx via setRouteCoordinates
+    // This is just for price calculation
   }, [calculatePrice]);
 
   const handleSubmitOrder = useCallback(() => {
@@ -387,6 +382,21 @@ function AppContent() {
     if (message) {
       setIsSubmitting(true);
       sendMessage(message);
+      
+      // Reset submitting state after timeout if no response received
+      setTimeout(() => {
+        setIsSubmitting(prev => {
+          // Only reset if still submitting (no response received yet)
+          if (prev) {
+            console.warn('Order submission timeout - resetting state');
+            setToast({
+              message: 'Order request timeout. Please try again.',
+              type: 'error',
+            });
+          }
+          return false;
+        });
+      }, 10000); // 10 second timeout
     }
   }, [createOrderMessage, sendMessage]);
 
@@ -526,104 +536,107 @@ function AppContent() {
       {/* Show main app when logged in and profile is complete (or not needed) */}
       {isLoggedIn === true && !needsProfile && (
         <>
-          <Map
-            center={mapCenter}
-            zoom={mapZoom}
-            onMapClick={handleMapClick}
-            onRouteDrawn={handleRouteDrawn}
+          <div className="absolute inset-0">
+            <Map
+              center={mapCenter}
+              zoom={mapZoom}
+              onMapClick={handleMapClick}
+              onRouteDrawn={handleRouteDrawn}
+            />
+          </div>
+
+          <div className="order-panel absolute top-5 right-5 w-[380px] max-h-[calc(100vh-40px)] bg-white rounded-2xl shadow-xl z-[1000] overflow-y-auto custom-scrollbar pointer-events-auto">
+            {orderState === 'booking' && (
+              <>
+                <div className="p-6 pb-4 border-b border-gray-200">
+                  <div className="flex justify-between items-center mb-1">
+                    <h1 className="text-2xl font-bold text-gray-900">🚗 {t('booking.title')}</h1>
+                    {user && (
+                      <button
+                        onClick={() => setShowUserProfileDialog(true)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors ${
+                          status === 'connecting' || status === 'reconnecting'
+                            ? 'animate-pulse ring-2 ring-yellow-500'
+                            : status === 'connected'
+                            ? 'ring-2 ring-green-500'
+                            : 'ring-2 ring-red-500'
+                        }`}
+                        title={t('settings.profile')}
+                      >
+                        {user.photoURL ? (
+                          <img
+                            src={user.photoURL}
+                            alt={user.displayName || 'User'}
+                            className="w-8 h-8 rounded-full"
+                          />
+                        ) : (
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                            status === 'connecting' || status === 'reconnecting'
+                              ? 'bg-yellow-500'
+                              : status === 'connected'
+                              ? 'bg-green-500'
+                              : 'bg-red-500'
+                          }`}>
+                            {(user.displayName || user.email || 'U').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-600">{t('booking.subtitle')}</p>
+                </div>
+                <BookingPanel
+                  onSubmit={handleSubmitOrder}
+                  isSubmitting={isSubmitting}
+                  getCurrentLocation={handleGetCurrentLocation}
+                  isGettingLocation={isGettingLocation}
+                  onEditPickup={() => setEditingLocation('pickup')}
+                  onEditDestination={() => setEditingLocation('destination')}
+                  setEditingLocation={setEditingLocation}
+                />
+              </>
+            )}
+
+            {orderState === 'waiting_bids' && (
+              <>
+                <div className="p-6 pb-4 border-b border-gray-200">
+                  <h1 className="text-2xl font-bold text-gray-900 mb-1">🚗 {t('order.status.searching')}</h1>
+                  <p className="text-sm text-gray-600">{t('order.waitingForDriver')}</p>
+                </div>
+                <WaitingBidsPanel
+                  onAcceptBid={handleAcceptBid}
+                  onDeclineBid={handleDeclineBid}
+                  onCancelOrder={handleCancelOrder}
+                  isSyncing={isSyncingOrder}
+                />
+              </>
+            )}
+
+            {orderState === 'driver_assigned' && (
+              <DriverAssignedPanel onBackToHome={handleBackToHome} />
+            )}
+          </div>
+
+          {toast && (
+            <Toast
+              message={toast.message}
+              type={toast.type}
+              onClose={() => setToast(null)}
+            />
+          )}
+
+          <RatingDialog
+            isOpen={showRatingDialog}
+            reviewData={reviewData}
+            onSubmit={handleReviewSubmit}
+            onClose={handleRatingDialogClose}
           />
 
-      <div className="order-panel absolute top-5 right-5 w-[380px] max-h-[calc(100vh-40px)] bg-white rounded-2xl shadow-xl z-[1000] overflow-y-auto custom-scrollbar">
-        {orderState === 'booking' && (
-          <>
-            <div className="p-6 pb-4 border-b border-gray-200">
-              <div className="flex justify-between items-center mb-1">
-                <h1 className="text-2xl font-bold text-gray-900">🚗 {t('booking.title')}</h1>
-                {user && (
-                  <button
-                    onClick={() => setShowUserProfileDialog(true)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors ${
-                      status === 'connecting' || status === 'reconnecting'
-                        ? 'animate-pulse ring-2 ring-yellow-500'
-                        : status === 'connected'
-                        ? 'ring-2 ring-green-500'
-                        : 'ring-2 ring-red-500'
-                    }`}
-                    title={t('settings.profile')}
-                  >
-                    {user.photoURL ? (
-                      <img
-                        src={user.photoURL}
-                        alt={user.displayName || 'User'}
-                        className="w-8 h-8 rounded-full"
-                      />
-                    ) : (
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-                        status === 'connecting' || status === 'reconnecting'
-                          ? 'bg-yellow-500'
-                          : status === 'connected'
-                          ? 'bg-green-500'
-                          : 'bg-red-500'
-                      }`}>
-                        {(user.displayName || user.email || 'U').charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-gray-600">{t('booking.subtitle')}</p>
-            </div>
-            <BookingPanel
-              onSubmit={handleSubmitOrder}
-              isSubmitting={isSubmitting}
-              getCurrentLocation={handleGetCurrentLocation}
-              isGettingLocation={isGettingLocation}
-              onEditPickup={() => setEditingLocation('pickup')}
-              onEditDestination={() => setEditingLocation('destination')}
-            />
-          </>
-        )}
-
-        {orderState === 'waiting_bids' && (
-          <>
-            <div className="p-6 pb-4 border-b border-gray-200">
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">🚗 {t('order.status.searching')}</h1>
-              <p className="text-sm text-gray-600">{t('order.waitingForDriver')}</p>
-            </div>
-            <WaitingBidsPanel
-              onAcceptBid={handleAcceptBid}
-              onDeclineBid={handleDeclineBid}
-              onCancelOrder={handleCancelOrder}
-              isSyncing={isSyncingOrder}
-            />
-          </>
-        )}
-
-        {orderState === 'driver_assigned' && (
-          <DriverAssignedPanel onBackToHome={handleBackToHome} />
-        )}
-      </div>
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-
-      <RatingDialog
-        isOpen={showRatingDialog}
-        reviewData={reviewData}
-        onSubmit={handleReviewSubmit}
-        onClose={handleRatingDialogClose}
-      />
-
-      <UserProfileDialog
-        isOpen={showUserProfileDialog}
-        onClose={() => setShowUserProfileDialog(false)}
-        onLogout={handleLogout}
-      />
+          <UserProfileDialog
+            isOpen={showUserProfileDialog}
+            onClose={() => setShowUserProfileDialog(false)}
+            onLogout={handleLogout}
+          />
         </>
       )}
     </>

@@ -32,6 +32,7 @@ interface OrderContextType {
   assignedDriver: DriverInfo | null;
   user: AuthUser | null;
   editingLocation: 'pickup' | 'destination' | null;
+  routeCoordinates: [number, number][] | null; // Route coordinates from OSRM
   setPickupLocation: (location: Location, address: string) => void;
   setDestinationLocation: (location: Location, address: string) => void;
   resetLocations: () => void;
@@ -45,6 +46,7 @@ interface OrderContextType {
   setAssignedDriver: (driver: DriverInfo | null) => void;
   setUser: (user: AuthUser | null) => void;
   setEditingLocation: (location: 'pickup' | 'destination' | null) => void;
+  setRouteCoordinates: (coordinates: [number, number][] | null) => void;
   createOrderMessage: () => WebSocketMessage | null;
   cancelOrderMessage: () => WebSocketMessage | null;
   acceptBidMessage: (bid: Bid) => WebSocketMessage | null;
@@ -71,6 +73,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [assignedDriver, setAssignedDriver] = useState<DriverInfo | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [editingLocation, setEditingLocation] = useState<'pickup' | 'destination' | null>(null);
+  const [routeCoordinates, setRouteCoordinates] = useState<[number, number][] | null>(null);
 
   const setPickupLocation = useCallback((location: Location, address: string) => {
     setPickupLocationState(location);
@@ -151,6 +154,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       time: pickupTime ? Math.floor(new Date(pickupTime).getTime() / 1000) : null,
       payment: paymentMethod,
       user_id: user.uid, // Use Firebase UID directly without prefix
+      // Stringify route coordinates array for backend storage
+      route_coordinates: routeCoordinates ? JSON.stringify(routeCoordinates) : undefined,
     };
 
     return {
@@ -158,7 +163,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       data: orderData,
       timestamp: Math.floor(Date.now() / 1000),
     };
-  }, [pickupLocation, destinationLocation, pickupAddress, destinationAddress, notes, pickupTime, paymentMethod, user]);
+  }, [pickupLocation, destinationLocation, pickupAddress, destinationAddress, notes, pickupTime, paymentMethod, user, routeCoordinates]);
 
   const cancelOrderMessage = useCallback((): WebSocketMessage | null => {
     // Client doesn't need to send order_id anymore
@@ -216,6 +221,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         bids,
         assignedDriver,
         user,
+        editingLocation,
+        routeCoordinates,
         setPickupLocation,
         setDestinationLocation,
         resetLocations,
@@ -229,6 +236,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         setAssignedDriver,
         setUser,
         setEditingLocation,
+        setRouteCoordinates,
         createOrderMessage,
         cancelOrderMessage,
         acceptBidMessage,
