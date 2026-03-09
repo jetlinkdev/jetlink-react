@@ -104,7 +104,10 @@
     "rateDriver": "Beri Nilai Pengemudi",
     "backToHome": "Kembali ke Beranda",
     "cancelOrder": "Batalkan Pesanan",
-    "loadingOrder": "Memuat Pesanan..."
+    "loadingOrder": "Memuat Pesanan...",
+    "orderExpired": "Order kadaluarsa! Membuat order baru...",
+    "orderExpiringSoon": "Cepat! Order akan segera kadaluarsa",
+    "orderWillExpire": "Order akan auto-batal jika tidak ada driver yang terima"
   },
   "driver": {
     "name": "Nama Pengemudi",
@@ -190,6 +193,14 @@
     "lightMode": "Mode Terang",
     "legal": "Legal & Kebijakan",
     "profile": "Pengaturan Profil",
-    "preferences": "Preferensi"
+    "preferences": "Preferensi",
+    "ttl": {
+      "label": "Batas Waktu Order",
+      "description": "Auto-batal jika tidak ada driver yang terima",
+      "select": "Pilih batas waktu",
+      "loadError": "Gagal memuat pengaturan batas waktu",
+      "saveError": "Gagal menyimpan batas waktu",
+      "saveSuccess": "Batas waktu berhasil diperbarui"
+    }
   }
 }

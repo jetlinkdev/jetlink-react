@@ -1,4 +1,5 @@
-export const WS_URL = 'ws://localhost:8080/ws';
+// WebSocket URL - use environment variable or default to localhost
+export const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 
 export const DEFAULT_LOCATION = {
   lat: -8.1716,

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOrder } from '../context/OrderContext';
 import { Bid } from '../types';
@@ -11,10 +12,85 @@ interface WaitingBidsPanelProps {
 
 export function WaitingBidsPanel({ onAcceptBid, onDeclineBid, onCancelOrder, isSyncing = false }: WaitingBidsPanelProps) {
   const { t } = useTranslation();
-  const { pickupAddress, destinationAddress, priceEstimate, bids } = useOrder();
+  const { pickupAddress, destinationAddress, priceEstimate, bids, orderCreatedAt, userTTLPreference } = useOrder();
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [timePercentage, setTimePercentage] = useState<number>(100);
+
+  // Calculate time remaining based on order created timestamp and user TTL preference
+  useEffect(() => {
+    if (!orderCreatedAt || !userTTLPreference) {
+      return;
+    }
+
+    const updateCountdown = () => {
+      const now = Date.now();
+      const orderAge = now - (orderCreatedAt * 1000); // Convert to milliseconds
+      const ttlMilliseconds = userTTLPreference * 1000;
+      const remaining = Math.max(0, ttlMilliseconds - orderAge);
+      
+      setTimeRemaining(remaining);
+      setTimePercentage((remaining / ttlMilliseconds) * 100);
+    };
+
+    // Update immediately
+    updateCountdown();
+
+    // Update every second
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [orderCreatedAt, userTTLPreference]);
+
+  // Format time remaining as MM:SS
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Determine color based on time remaining (warning when < 30 seconds)
+  const getTimeColor = () => {
+    if (timeRemaining > 60000) return 'text-green-600 dark:text-green-400'; // > 1 min
+    if (timeRemaining > 30000) return 'text-yellow-600 dark:text-yellow-400'; // 30-60 sec
+    return 'text-red-600 dark:text-red-400'; // < 30 sec
+  };
+
+  const getProgressBarColor = () => {
+    if (timeRemaining > 60000) return 'bg-green-500'; // > 1 min
+    if (timeRemaining > 30000) return 'bg-yellow-500'; // 30-60 sec
+    return 'bg-red-500'; // < 30 sec
+  };
 
   return (
     <div className="p-6">
+      {/* Countdown Timer */}
+      {orderCreatedAt && userTTLPreference && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+              ⏱️ {t('settings.ttl.label')}
+            </span>
+            <span className={`text-lg font-bold ${getTimeColor()}`}>
+              {formatTime(timeRemaining)}
+            </span>
+          </div>
+          <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-1000 ease-linear ${getProgressBarColor()}`}
+              style={{ width: `${timePercentage}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
+            {timeRemaining === 0 
+              ? t('order.orderExpired') 
+              : timeRemaining < 30000 
+                ? t('order.orderExpiringSoon') 
+                : t('order.orderWillExpire')}
+          </p>
+        </div>
+      )}
+
       {/* Loading State */}
       <div className="text-center py-6">
         <div className="relative inline-block">

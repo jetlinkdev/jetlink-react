@@ -104,7 +104,10 @@
     "rateDriver": "Rate Driver",
     "backToHome": "Back to Home",
     "cancelOrder": "Cancel Order",
-    "loadingOrder": "Loading Order..."
+    "loadingOrder": "Loading Order...",
+    "orderExpired": "Order expired! Creating new order...",
+    "orderExpiringSoon": "Hurry! Order will expire soon",
+    "orderWillExpire": "Order will auto-cancel if no driver accepts"
   },
   "driver": {
     "name": "Driver Name",
@@ -190,6 +193,14 @@
     "lightMode": "Light Mode",
     "legal": "Legal & Policy",
     "profile": "Profile Settings",
-    "preferences": "Preferences"
+    "preferences": "Preferences",
+    "ttl": {
+      "label": "Order Time Limit",
+      "description": "Auto-cancel if no driver accepts",
+      "select": "Select time limit",
+      "loadError": "Failed to load time limit setting",
+      "saveError": "Failed to save time limit",
+      "saveSuccess": "Time limit updated successfully"
+    }
   }
 }

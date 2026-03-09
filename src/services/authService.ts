@@ -1,6 +1,6 @@
-import { 
-  GoogleAuthProvider, 
-  signInWithPopup, 
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
   signOut as firebaseSignOut,
   User,
   onAuthStateChanged,
@@ -13,6 +13,7 @@ export type AuthUser = {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
+  getIdToken: () => Promise<string>;
 };
 
 export type AuthStateCallback = (user: AuthUser | null) => void;
@@ -89,6 +90,7 @@ class AuthService {
       email: user.email,
       displayName: user.displayName,
       photoURL: user.photoURL,
+      getIdToken: () => user.getIdToken(),
     };
   }
 }

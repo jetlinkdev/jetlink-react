@@ -179,12 +179,18 @@ export function useWebSocket(onMessage?: (data: WebSocketMessage) => void): UseW
       if (document.visibilityState === 'visible') {
         console.log('Tab became visible, checking connection...');
 
+        // Don't reconnect if WebSocket is still open
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          console.log('WebSocket connection is healthy, skipping reconnect');
+          return;
+        }
+
         // If disconnected or reconnecting, try to connect
         if (status === 'disconnected' || status === 'reconnecting') {
           console.log('Connection lost, attempting reconnect...');
           reconnectAttemptsRef.current = 0; // Reset attempts for fresh start
           connect();
-        } else if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        } else {
           // Connection might be stale, force reconnect
           console.log('Connection stale, forcing reconnect...');
           connect();

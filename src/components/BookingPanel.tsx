@@ -12,7 +12,13 @@ interface BookingPanelProps {
   isGettingLocation: boolean;
   onEditPickup: () => void;
   onEditDestination: () => void;
+  setEditingLocation: (location: 'pickup' | 'destination' | null) => void;
 }
+
+// Cache for geocoding results (Nominatim policy requires caching)
+// Key: query string, Value: { results, timestamp }
+const geocodeCache = new Map<string, { results: Suggestion[], timestamp: number }>();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 function debounce<T extends (...args: string[]) => Promise<void>>(func: T, wait: number): T {
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -22,7 +28,7 @@ function debounce<T extends (...args: string[]) => Promise<void>>(func: T, wait:
   }) as T;
 }
 
-export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGettingLocation, onEditPickup, onEditDestination }: BookingPanelProps) {
+export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGettingLocation, onEditPickup, onEditDestination, setEditingLocation }: BookingPanelProps) {
   const { t } = useTranslation();
   const {
     pickupAddress,
@@ -70,13 +76,49 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
   }, [destinationAddress]);
 
   const geocodeAddress = useCallback(async (query: string): Promise<Suggestion[]> => {
+    const cacheKey = `search:${query}`;
+    const cached = geocodeCache.get(cacheKey);
+    const now = Date.now();
+
+    // Return cached results if still valid (Nominatim policy requires caching)
+    if (cached && (now - cached.timestamp) < CACHE_TTL) {
+      console.log('Geocode cache hit:', query);
+      return cached.results;
+    }
+
     try {
       const response = await fetch(
-        `${NOMINATIM_URL}/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=id`
+        `${NOMINATIM_URL}/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=id`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Jetlink Ride-Hailing App v1.0.0 (https://jetlink.com)',
+          },
+        }
       );
-      return await response.json();
+
+      if (!response.ok) {
+        if (response.status === 403 || response.status === 429) {
+          console.warn('Nominatim rate limit or blocked. Using cached data if available.');
+          if (cached) return cached.results;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const results = await response.json();
+      
+      // Cache the results (Nominatim policy requires caching)
+      geocodeCache.set(cacheKey, {
+        results,
+        timestamp: now,
+      });
+
+      console.log('Geocode cache set:', query);
+      return results;
     } catch (error) {
       console.error('Geocoding error:', error);
+      // Return cached data on error if available
+      if (cached) return cached.results;
       return [];
     }
   }, []);
@@ -148,6 +190,22 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
     // The actual location setting is handled by the parent via map click
   };
 
+  // Handle pickup input focus - enter pickup selection mode
+  const handlePickupFocus = useCallback(() => {
+    setEditingLocation('pickup');
+    if (pickupSuggestions.length > 0) {
+      setShowPickupSuggestions(true);
+    }
+  }, [pickupSuggestions.length, setEditingLocation]);
+
+  // Handle destination input focus - enter destination selection mode
+  const handleDestinationFocus = useCallback(() => {
+    setEditingLocation('destination');
+    if (destinationSuggestions.length > 0) {
+      setShowDestinationSuggestions(true);
+    }
+  }, [destinationSuggestions.length, setEditingLocation]);
+
   // Get minimum time string (HH:mm) for today (10 minutes from now)
   const getMinTimeForToday = (): string => {
     const now = new Date();
@@ -194,22 +252,31 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
     setPickupTime(timestamp.toString());
   };
 
-  // Determine border colors based on selection state
+  // Determine border colors based on editing state AND whether location is set
   const getPickupBorderClass = () => {
-    if (!pickupLocation && !destinationLocation) {
+    // Show green border when pickup location is already set (success state)
+    if (pickupLocation) {
       return 'border-green-500';
     }
-    return 'border-green-400';
+    // Highlight red when in pickup selection mode (waiting for user to click map)
+    if (editingLocation === 'pickup') {
+      return 'border-red-500 ring-2 ring-red-500/20';
+    }
+    // Normal border when not in selection mode and no location set
+    return 'border-gray-300 dark:border-gray-600';
   };
 
   const getDestinationBorderClass = () => {
-    if (pickupLocation && !destinationLocation) {
-      return 'border-red-500';
+    // Show green border when destination location is already set (success state)
+    if (destinationLocation) {
+      return 'border-green-500';
     }
-    if (pickupLocation && destinationLocation) {
-      return 'border-green-400';
+    // Highlight red when in destination selection mode (waiting for user to click map)
+    if (editingLocation === 'destination') {
+      return 'border-red-500 ring-2 ring-red-500/20';
     }
-    return 'border-gray-300';
+    // Normal border when not in selection mode and no location set
+    return 'border-gray-300 dark:border-gray-600';
   };
 
   return (
@@ -240,12 +307,18 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
                 setPickupInputValue(e.target.value);
                 handlePickupInput(e.target.value);
               }}
-              onFocus={() => {
-                if (pickupSuggestions.length > 0) {
-                  setShowPickupSuggestions(true);
+              onFocus={handlePickupFocus}
+              onClick={handlePickupFocus}
+              placeholder={(() => {
+                if (editingLocation === 'pickup') {
+                  return 'Klik map untuk pilih lokasi jemput...';
                 }
-              }}
-              placeholder={t('booking.pickupPlaceholder')}
+                if (pickupLocation) {
+                  // Show coordinates as fallback if address not available
+                  return `${pickupLocation.lat.toFixed(4)}, ${pickupLocation.lon.toFixed(4)}`;
+                }
+                return t('booking.pickupPlaceholder');
+              })()}
               readOnly
               required
               autoComplete="off"
@@ -342,12 +415,18 @@ export function BookingPanel({ onSubmit, isSubmitting, getCurrentLocation, isGet
                 setDestinationInputValue(e.target.value);
                 handleDestinationInput(e.target.value);
               }}
-              onFocus={() => {
-                if (destinationSuggestions.length > 0) {
-                  setShowDestinationSuggestions(true);
+              onFocus={handleDestinationFocus}
+              onClick={handleDestinationFocus}
+              placeholder={(() => {
+                if (editingLocation === 'destination') {
+                  return 'Klik map untuk pilih lokasi tujuan...';
                 }
-              }}
-              placeholder={t('booking.destinationPlaceholder')}
+                if (destinationLocation) {
+                  // Show coordinates as fallback if address not available
+                  return `${destinationLocation.lat.toFixed(4)}, ${destinationLocation.lon.toFixed(4)}`;
+                }
+                return t('booking.destinationPlaceholder');
+              })()}
               readOnly
               required
               autoComplete="off"

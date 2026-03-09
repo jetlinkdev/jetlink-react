@@ -104,7 +104,10 @@
     "rateDriver": "Berei Nilai Supir",
     "backToHome": "Mbalik menyang Beranda",
     "cancelOrder": "Batalake Pesenan",
-    "loadingOrder": "Ngemot Pesenan..."
+    "loadingOrder": "Ngemot Pesenan...",
+    "orderExpired": "Order kadaluwarsa! Gawe order anyar...",
+    "orderExpiringSoon": "Cepet! Order bakal enggal kadaluwarsa",
+    "orderWillExpire": "Order bakal oto-batal yen ora ana driver sing nampa"
   },
   "driver": {
     "name": "Jeneng Supir",
@@ -190,6 +193,14 @@
     "lightMode": "Mode Terang",
     "legal": "Legal & Kebijakan",
     "profile": "Pengaturan Profil",
-    "preferences": "Preferensi"
+    "preferences": "Preferensi",
+    "ttl": {
+      "label": "Bates Wektu Order",
+      "description": "Oto-batal yen ora ana driver sing nampa",
+      "select": "Pilih bates wektu",
+      "loadError": "Gagal memuat pengaturan bates wektu",
+      "saveError": "Gagal nyimpen bates wektu",
+      "saveSuccess": "Bates wektu sukses dianyari"
+    }
   }
 }

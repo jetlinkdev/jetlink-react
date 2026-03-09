@@ -33,6 +33,8 @@ interface OrderContextType {
   user: AuthUser | null;
   editingLocation: 'pickup' | 'destination' | null;
   routeCoordinates: [number, number][] | null; // Route coordinates from OSRM
+  orderCreatedAt: number | null; // Timestamp when order was created (for countdown)
+  userTTLPreference: number; // User's TTL preference in seconds
   setPickupLocation: (location: Location, address: string) => void;
   setDestinationLocation: (location: Location, address: string) => void;
   resetLocations: () => void;
@@ -47,6 +49,8 @@ interface OrderContextType {
   setUser: (user: AuthUser | null) => void;
   setEditingLocation: (location: 'pickup' | 'destination' | null) => void;
   setRouteCoordinates: (coordinates: [number, number][] | null) => void;
+  setOrderCreatedAt: (timestamp: number | null) => void;
+  setUserTTLPreference: (ttl: number) => void;
   createOrderMessage: () => WebSocketMessage | null;
   cancelOrderMessage: () => WebSocketMessage | null;
   acceptBidMessage: (bid: Bid) => WebSocketMessage | null;
@@ -74,6 +78,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [editingLocation, setEditingLocation] = useState<'pickup' | 'destination' | null>(null);
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][] | null>(null);
+  const [orderCreatedAt, setOrderCreatedAt] = useState<number | null>(null);
+  const [userTTLPreference, setUserTTLPreference] = useState<number>(300); // Default 5 minutes
 
   const setPickupLocation = useCallback((location: Location, address: string) => {
     setPickupLocationState(location);
@@ -223,6 +229,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         user,
         editingLocation,
         routeCoordinates,
+        orderCreatedAt,
+        userTTLPreference,
         setPickupLocation,
         setDestinationLocation,
         resetLocations,
@@ -237,6 +245,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         setUser,
         setEditingLocation,
         setRouteCoordinates,
+        setOrderCreatedAt,
+        setUserTTLPreference,
         createOrderMessage,
         cancelOrderMessage,
         acceptBidMessage,

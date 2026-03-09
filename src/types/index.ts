@@ -32,6 +32,7 @@ export interface OrderData {
   time: number | null; // null means "Segera"
   payment: PaymentMethod;
   user_id: string;
+  route_coordinates?: string; // Stringified array of [lon, lat] coordinates from OSRM
 }
 
 export interface TimeOption {

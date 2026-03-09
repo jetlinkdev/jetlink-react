@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../context/LanguageContext';
 import { useDarkMode } from '../context/DarkModeContext';
 import { authService } from '../services/authService';
+import { userSettingsService } from '../services/userSettingsService';
 
 interface UserProfileDialogProps {
   isOpen: boolean;
@@ -16,6 +17,53 @@ export function UserProfileDialog({ isOpen, onClose, onLogout }: UserProfileDial
   const { isDark, toggleDarkMode } = useDarkMode();
   const user = authService.getCurrentUser();
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
+  const [orderTTL, setOrderTTL] = useState<number>(300); // Default 5 minutes
+  const [showTTLSelector, setShowTTLSelector] = useState(false);
+  const [ttlLoading, setTtlLoading] = useState(false);
+  const [ttlError, setTtlError] = useState<string | null>(null);
+  const [ttlSuccess, setTtlSuccess] = useState<string | null>(null);
+
+  // Load user's TTL preference when dialog opens
+  useEffect(() => {
+    if (isOpen && user) {
+      loadTTLPreference();
+    }
+  }, [isOpen, user]);
+
+  const loadTTLPreference = async () => {
+    try {
+      setTtlError(null);
+      const ttl = await userSettingsService.getOrderTTLPreference();
+      setOrderTTL(ttl);
+    } catch (err) {
+      console.error('Failed to load TTL preference:', err);
+      setTtlError(t('settings.ttl.loadError'));
+    }
+  };
+
+  const handleTTLChange = async (newTTL: number) => {
+    try {
+      setTtlLoading(true);
+      setTtlError(null);
+      setTtlSuccess(null);
+      
+      await userSettingsService.updateOrderTTLPreference(newTTL);
+      setOrderTTL(newTTL);
+      setTtlSuccess(t('settings.ttl.saveSuccess'));
+      setShowTTLSelector(false);
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setTtlSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to update TTL preference:', err);
+      setTtlError(err instanceof Error ? err.message : t('settings.ttl.saveError'));
+    } finally {
+      setTtlLoading(false);
+    }
+  };
+
+  const ttlMinutes = Math.floor(orderTTL / 60);
+  const ttlSeconds = orderTTL % 60;
 
   if (!isOpen) return null;
 
@@ -156,6 +204,90 @@ export function UserProfileDialog({ isOpen, onClose, onLogout }: UserProfileDial
                 />
               </div>
             </button>
+          </div>
+
+          {/* Order TTL Preference */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
+              {t('settings.ttl.label')}
+            </label>
+            
+            {/* Success/Error Messages */}
+            {ttlSuccess && (
+              <div className="mb-3 px-4 py-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-xl border border-green-200 dark:border-green-800 text-sm">
+                {ttlSuccess}
+              </div>
+            )}
+            {ttlError && (
+              <div className="mb-3 px-4 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl border border-red-200 dark:border-red-800 text-sm">
+                {ttlError}
+              </div>
+            )}
+            
+            <div className="relative">
+              <button
+                onClick={() => setShowTTLSelector(!showTTLSelector)}
+                disabled={ttlLoading}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-green-500 transition-colors disabled:opacity-50"
+              >
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-left">
+                    <span className="text-gray-700 dark:text-gray-200 font-medium">
+                      {ttlMinutes}m {ttlSeconds > 0 ? `${ttlSeconds}s` : ''}
+                    </span>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.ttl.description')}</p>
+                  </div>
+                </div>
+                {ttlLoading ? (
+                  <svg className="animate-spin w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : (
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transition-transform ${showTTLSelector ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                )}
+              </button>
+
+              {showTTLSelector && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowTTLSelector(false)} />
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-700 rounded-xl shadow-lg border border-gray-200 dark:border-gray-600 z-20 overflow-hidden">
+                    <div className="p-4 space-y-2">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('settings.ttl.select')}</p>
+                      {[
+                        { value: 60, label: '1 min' },
+                        { value: 120, label: '2 min' },
+                        { value: 180, label: '3 min' },
+                        { value: 300, label: '5 min (default)' },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => handleTTLChange(option.value)}
+                          disabled={ttlLoading}
+                          className={`w-full text-left px-4 py-3 rounded-lg transition-colors disabled:opacity-50 ${
+                            orderTTL === option.value
+                              ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 font-medium'
+                              : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Legal Links */}

@@ -14,8 +14,9 @@ import { UserProfileDialog } from './components/UserProfileDialog';
 import { Bid, WebSocketMessage, OrderState, ReviewData } from './types';
 import { DEFAULT_LOCATION, MAP_CONFIG } from './config/constants';
 import { authService } from './services/authService';
+import { userSettingsService } from './services/userSettingsService';
 
-function Toast({ message, type, onClose }: { message: string; type: 'success' | 'info'; onClose: () => void }) {
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'info' | 'error'; onClose: () => void }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -55,6 +56,8 @@ function AppContent() {
     setUser,
     editingLocation,
     setEditingLocation,
+    setOrderCreatedAt,
+    setUserTTLPreference,
   } = useOrder();
 
   const [mapCenter, setMapCenter] = useState<[number, number]>(
@@ -63,7 +66,7 @@ function AppContent() {
   const [mapZoom, setMapZoom] = useState(MAP_CONFIG.defaultZoom);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null); // null = checking, false = not logged in, true = logged in
   const [needsProfile, setNeedsProfile] = useState(false);
   const [isSyncingOrder, setIsSyncingOrder] = useState(true); // Track if waiting for server sync
@@ -98,10 +101,29 @@ function AppContent() {
           setIsSyncingOrder(false);
         }
       }, 2000);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isLoggedIn, hasReceivedOrderSync]);
+
+  // Load user's TTL preference when logged in
+  useEffect(() => {
+    if (isLoggedIn && user) {
+      loadUserTTLPreference();
+    }
+  }, [isLoggedIn, user]);
+
+  const loadUserTTLPreference = async () => {
+    try {
+      const ttl = await userSettingsService.getOrderTTLPreference();
+      setUserTTLPreference(ttl);
+      console.log('Loaded user TTL preference:', ttl, 'seconds');
+    } catch (err) {
+      console.error('Failed to load user TTL preference:', err);
+      // Use default (300 seconds / 5 minutes)
+      setUserTTLPreference(300);
+    }
+  };
 
   const handleLoginSuccess = useCallback(() => {
     // isLoggedIn will be updated by the auth state listener
@@ -136,6 +158,8 @@ function AppContent() {
         // Update state
         setCurrentOrderId(order_id.toString());
         setOrderState(ui_state as OrderState);
+        // Set order created timestamp for countdown (use current time as fallback)
+        setOrderCreatedAt(Math.floor(Date.now() / 1000));
 
         // Restore order data from server
         if (pickup) {
@@ -181,6 +205,8 @@ function AppContent() {
         const { order_id: existingOrderId, ui_state: existingUiState } = data.data as any;
         setCurrentOrderId(existingOrderId.toString());
         setOrderState(existingUiState as OrderState);
+        // Set order created timestamp for countdown (use current time as fallback)
+        setOrderCreatedAt(Math.floor(Date.now() / 1000));
         // Mark that we received order sync
         setHasReceivedOrderSync(true);
         // Stop syncing
@@ -196,6 +222,8 @@ function AppContent() {
         const orderId = data.data as number;
         setCurrentOrderId(orderId.toString());
         setOrderState('waiting_bids');
+        // Set order created timestamp for countdown (persist across refresh)
+        setOrderCreatedAt(Math.floor(Date.now() / 1000));
         setIsSubmitting(false); // Reset submitting state - order successfully created
         setToast({
           message: 'Order created! Waiting for drivers...',
@@ -252,7 +280,20 @@ function AppContent() {
         setIsSubmitting(false);
         setOrderState('booking');
         resetLocations();
+        setOrderCreatedAt(null); // Clear order timestamp
         setToast({ message: 'Order cancelled successfully', type: 'info' });
+        break;
+
+      case 'order_expired':
+        console.log('Order expired:', data.data);
+        setIsSubmitting(false);
+        setOrderState('booking');
+        resetLocations();
+        setOrderCreatedAt(null); // Clear order timestamp
+        setToast({ 
+          message: (data.data as any)?.message || 'Order expired - no driver accepted', 
+          type: 'error' 
+        });
         break;
 
       case 'error':
@@ -371,7 +412,7 @@ function AppContent() {
     }
   }, [editingLocation, setEditingLocation, setPickupLocation, setDestinationLocation]);
 
-  const handleRouteDrawn = useCallback((distance: number, coordinates: [number, number][]) => {
+  const handleRouteDrawn = useCallback((distance: number, _coordinates: [number, number][]) => {
     calculatePrice(distance);
     // Route coordinates are already set in Map.tsx via setRouteCoordinates
     // This is just for price calculation
@@ -382,8 +423,9 @@ function AppContent() {
     if (message) {
       setIsSubmitting(true);
       sendMessage(message);
-      
+
       // Reset submitting state after timeout if no response received
+      // Increased timeout to 30 seconds to account for network latency and backend processing
       setTimeout(() => {
         setIsSubmitting(prev => {
           // Only reset if still submitting (no response received yet)
@@ -396,7 +438,7 @@ function AppContent() {
           }
           return false;
         });
-      }, 10000); // 10 second timeout
+      }, 30000); // 30 second timeout (increased from 10s)
     }
   }, [createOrderMessage, sendMessage]);
 
